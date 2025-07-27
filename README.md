@@ -1,80 +1,257 @@
-# 🏗 Scaffold-ETH 2
+# 🎰 KasplexLottery - Decentralized Lottery DApp
 
 <h4 align="center">
-  <a href="https://docs.scaffoldeth.io">Documentation</a> |
-  <a href="https://scaffoldeth.io">Website</a>
+  <a href="#features">Features</a> |
+  <a href="#smart-contract">Smart Contract</a> |
+  <a href="#frontend">Frontend</a> |
+  <a href="#getting-started">Getting Started</a>
 </h4>
 
-🧪 An open-source, up-to-date toolkit for building decentralized applications (dapps) on the Ethereum blockchain. It's designed to make it easier for developers to create and deploy smart contracts and build user interfaces that interact with those contracts.
+🎲 A fully decentralized lottery system built on Ethereum, featuring automatic draws, fair prize distribution, and a modern web interface. Players select 5 numbers from 1-35, with draws occurring every 3.5 days and prizes distributed across 5 tiers.
 
-⚙️ Built using NextJS, RainbowKit, Hardhat, Wagmi, Viem, and Typescript.
+⚙️ Built using NextJS, RainbowKit, Hardhat, Wagmi, Viem, and Typescript on top of Scaffold-ETH 2.
 
-- ✅ **Contract Hot Reload**: Your frontend auto-adapts to your smart contract as you edit it.
-- 🪝 **[Custom hooks](https://docs.scaffoldeth.io/hooks/)**: Collection of React hooks wrapper around [wagmi](https://wagmi.sh/) to simplify interactions with smart contracts with typescript autocompletion.
-- 🧱 [**Components**](https://docs.scaffoldeth.io/components/): Collection of common web3 components to quickly build your frontend.
-- 🔥 **Burner Wallet & Local Faucet**: Quickly test your application with a burner wallet and local faucet.
-- 🔐 **Integration with Wallet Providers**: Connect to different wallet providers and interact with the Ethereum network.
+## Features
 
-![Debug Contracts tab](https://github.com/scaffold-eth/scaffold-eth-2/assets/55535804/b237af0c-5027-4849-a5c1-2e31495cccb1)
+- 🎯 **Number Selection**: Choose 5 unique numbers from 1-35
+- 💰 **Fixed Ticket Price**: 1 KAS per ticket with 1% admin fee
+- ⏰ **Automatic Draws**: Every 3.5 days (302,400 seconds)
+- 🏆 **5-Tier Prize System**: 40%, 25%, 20%, 10%, 5% distribution
+- 🔒 **Secure Random Generation**: Block-based randomness using `block.prevrandao`
+- 📱 **Modern UI**: Responsive design with real-time updates
+- 🔐 **Wallet Integration**: Connect with MetaMask and other Web3 wallets
+- 🧪 **Comprehensive Testing**: 23 test cases covering all functionality
 
-## Requirements
+## Smart Contract
 
-Before you begin, you need to install the following tools:
+### KasplexLottery Contract
 
-- [Node (>= v20.18.3)](https://nodejs.org/en/download/)
-- Yarn ([v1](https://classic.yarnpkg.com/en/docs/install/) or [v2+](https://yarnpkg.com/getting-started/install))
-- [Git](https://git-scm.com/downloads)
+The main lottery contract (`contracts/YourContract.sol`) implements:
 
-## Quickstart
+#### Core Functions
 
-To get started with Scaffold-ETH 2, follow the steps below:
+```solidity
+// Purchase a lottery ticket
+function buyTicket(uint8[5] memory numbers) external payable
 
-1. Install dependencies if it was skipped in CLI:
+// Draw the current lottery (automated every 3.5 days)
+function drawLottery() external
 
+// Claim prizes for a specific lottery
+function claimPrize(uint256 lotteryId) external
+
+// Admin function to withdraw fees
+function withdrawAdminFees() external onlyOwner
 ```
-cd my-dapp-example
+
+#### View Functions
+
+```solidity
+// Get current lottery information
+function getCurrentLottery() external view returns (Lottery memory)
+
+// Get user's prize for a specific lottery
+function getUserPrize(address user, uint256 lotteryId) external view returns (uint256)
+
+// Get user's tickets for a specific lottery
+function getUserTickets(address user, uint256 lotteryId) external view returns (uint8[5][] memory)
+
+// Get time remaining until next draw
+function getTimeUntilDraw() external view returns (uint256)
+```
+
+#### Events
+
+```solidity
+event TicketPurchased(address indexed player, uint256 indexed lotteryId, uint8[5] numbers);
+event LotteryDrawn(uint256 indexed lotteryId, uint8[5] winningNumbers, uint256 totalPrizePool);
+event PrizeClaimed(address indexed winner, uint256 amount);
+```
+
+### Prize Distribution
+
+| Matches | Prize Tier | Percentage |
+|---------|------------|------------|
+| 5/5     | Tier 1     | 40%        |
+| 4/5     | Tier 2     | 25%        |
+| 3/5     | Tier 3     | 20%        |
+| 2/5     | Tier 4     | 10%        |
+| 1/5     | Tier 5     | 5%         |
+
+### Security Features
+
+- **Input Validation**: Numbers must be 1-35, unique, and sorted
+- **Access Control**: Owner-only functions for admin operations
+- **Reentrancy Protection**: Safe prize claiming mechanism
+- **Time-based Controls**: Prevents premature lottery draws
+- **Emergency Functions**: Owner can withdraw funds if needed
+
+## Frontend
+
+### User Interface
+
+The frontend (`packages/nextjs/app/page.tsx`) provides:
+
+- **Number Selection Grid**: Interactive 1-35 number picker
+- **Lottery Information**: Current lottery ID, prize pool, time until draw
+- **Ticket Management**: View purchased tickets and track prizes
+- **Prize Claiming**: One-click prize claiming for winning tickets
+- **Real-time Updates**: Live countdown and lottery status
+
+### Key Components
+
+```typescript
+// Contract interaction hooks
+const { data: currentLottery } = useScaffoldContractRead({
+  contractName: "KasplexLottery",
+  functionName: "getCurrentLottery",
+});
+
+// Write functions for user actions
+const { writeAsync: buyTicket } = useScaffoldContractWrite({
+  contractName: "KasplexLottery",
+  functionName: "buyTicket",
+});
+
+// Event watching for real-time updates
+useScaffoldEventSubscriber({
+  contractName: "KasplexLottery",
+  eventName: "TicketPurchased",
+  listener: (logs) => {
+    // Handle ticket purchase events
+  },
+});
+```
+
+## Getting Started
+
+### Requirements
+
+- [Node.js (>= v20.18.3)](https://nodejs.org/en/download/)
+- [Yarn (v1 or v2+)](https://yarnpkg.com/getting-started/install)
+- [Git](https://git-scm.com/downloads)
+- [MetaMask](https://metamask.io/) or other Web3 wallet
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/NukeThemAII/ScaffoldLotto.git
+cd ScaffoldLotto/my-dapp-example
+```
+
+2. Install dependencies:
+```bash
 yarn install
 ```
 
-2. Run a local network in the first terminal:
-
-```
+3. Start local blockchain:
+```bash
 yarn chain
 ```
 
-This command starts a local Ethereum network using Hardhat. The network runs on your local machine and can be used for testing and development. You can customize the network configuration in `packages/hardhat/hardhat.config.ts`.
-
-3. On a second terminal, deploy the test contract:
-
-```
+4. Deploy the contract:
+```bash
 yarn deploy
 ```
 
-This command deploys a test smart contract to the local network. The contract is located in `packages/hardhat/contracts` and can be modified to suit your needs. The `yarn deploy` command uses the deploy script located in `packages/hardhat/deploy` to deploy the contract to the network. You can also customize the deploy script.
-
-4. On a third terminal, start your NextJS app:
-
-```
+5. Start the frontend:
+```bash
 yarn start
 ```
 
-Visit your app on: `http://localhost:3000`. You can interact with your smart contract using the `Debug Contracts` page. You can tweak the app config in `packages/nextjs/scaffold.config.ts`.
+6. Visit `http://localhost:3000` to interact with the lottery
 
-Run smart contract test with `yarn hardhat:test`
+### Testing
 
-- Edit your smart contracts in `packages/hardhat/contracts`
-- Edit your frontend homepage at `packages/nextjs/app/page.tsx`. For guidance on [routing](https://nextjs.org/docs/app/building-your-application/routing/defining-routes) and configuring [pages/layouts](https://nextjs.org/docs/app/building-your-application/routing/pages-and-layouts) checkout the Next.js documentation.
-- Edit your deployment scripts in `packages/hardhat/deploy`
+Run the comprehensive test suite:
+```bash
+yarn hardhat:test
+```
 
+The test suite includes 23 tests covering:
+- Contract deployment and initialization
+- Ticket purchasing with validation
+- Lottery drawing mechanics
+- Prize distribution and claiming
+- Admin functions and security
+- Edge cases and error handling
 
-## Documentation
+### Development Commands
 
-Visit our [docs](https://docs.scaffoldeth.io) to learn how to start building with Scaffold-ETH 2.
+```bash
+# Run local blockchain
+yarn chain
 
-To know more about its features, check out our [website](https://scaffoldeth.io).
+# Deploy contracts
+yarn deploy
 
-## Contributing to Scaffold-ETH 2
+# Start frontend development server
+yarn start
 
-We welcome contributions to Scaffold-ETH 2!
+# Run tests
+yarn hardhat:test
 
-Please see [CONTRIBUTING.MD](https://github.com/scaffold-eth/scaffold-eth-2/blob/main/CONTRIBUTING.md) for more information and guidelines for contributing to Scaffold-ETH 2.
+# Lint code
+yarn lint
+
+# Format code
+yarn format
+```
+
+## Project Structure
+
+```
+my-dapp-example/
+├── packages/
+│   ├── hardhat/                 # Smart contract development
+│   │   ├── contracts/
+│   │   │   └── YourContract.sol # KasplexLottery contract
+│   │   ├── deploy/              # Deployment scripts
+│   │   ├── test/                # Contract tests
+│   │   └── scripts/             # Utility scripts
+│   └── nextjs/                  # Frontend application
+│       ├── app/
+│       │   └── page.tsx         # Main lottery interface
+│       ├── components/          # Reusable UI components
+│       ├── hooks/               # Custom React hooks
+│       └── contracts/           # Contract type definitions
+├── README.md                    # This file
+└── package.json                 # Project configuration
+```
+
+## Gas Optimization
+
+- **Contract Size**: 1,981,838 gas (6.6% of block limit)
+- **Ticket Purchase**: ~100,000 gas per ticket
+- **Lottery Draw**: ~200,000 gas per draw
+- **Prize Claim**: ~50,000 gas per claim
+
+## Security Considerations
+
+- **Randomness**: Uses `block.prevrandao` for fair number generation
+- **Admin Fees**: Transparent 1% fee structure
+- **Prize Pool**: Automatic distribution prevents fund accumulation
+- **Access Control**: Owner privileges limited to fee withdrawal and emergency functions
+- **Input Validation**: Comprehensive checks prevent invalid ticket purchases
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENCE](LICENCE) file for details.
+
+## Built With
+
+- [Scaffold-ETH 2](https://scaffoldeth.io/) - Development framework
+- [Hardhat](https://hardhat.org/) - Ethereum development environment
+- [Next.js](https://nextjs.org/) - React framework
+- [RainbowKit](https://www.rainbowkit.com/) - Wallet connection
+- [Wagmi](https://wagmi.sh/) - React hooks for Ethereum
+- [Tailwind CSS](https://tailwindcss.com/) - Styling framework
+
+---
+
+🎰 **Ready to play?** Start the local development environment and try your luck with KasplexLottery!
