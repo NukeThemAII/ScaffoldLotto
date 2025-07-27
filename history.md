@@ -146,4 +146,104 @@
 
 ---
 
-*This checkpoint represents a complete, functional decentralized lottery system ready for user interaction and further development.*
+## Checkpoint: [2024-12-19 18:45] - Jackpot Rollover Implementation
+
+### Context
+- **Previous state**: Complete KasplexLottery DApp with basic prize distribution
+- **Repository scan findings**: 
+  - All tests passing (47+ test cases)
+  - Frontend running successfully on http://localhost:3001
+  - Local blockchain and development servers operational
+- **Related files**: 
+  - `packages/hardhat/contracts/YourContract.sol` - Enhanced with rollover logic
+  - `packages/hardhat/test/YourContract.ts` - Updated for new event signatures
+  - `packages/hardhat/test/AdvancedTests.ts` - Fixed error message expectations
+  - `packages/hardhat/test/JackpotRolloverTests.ts` - New comprehensive rollover tests
+
+### Implementation
+
+#### Smart Contract Enhancements
+- **Approach taken**: Enhanced existing prize distribution to accumulate unclaimed prizes
+- **Key decisions**: 
+  - Implemented automatic jackpot rollover when no winners exist
+  - Added `JackpotRollover` event for transparency and frontend integration
+  - Enhanced `claimPrize` function with "Prize already claimed for this lottery" error
+  - Added `getJackpotInfo()` and `getUserPrize()` view functions for better UX
+  - Separated admin fees from rollover calculations for accurate accounting
+- **Challenges encountered**: 
+  - Test failures due to updated error messages in prize claiming
+  - Constructor parameter mismatch in new test file
+  - Time advancement issues in blockchain testing environment
+
+#### Testing Infrastructure
+- **Approach taken**: Created dedicated test suite for rollover functionality
+- **Key decisions**:
+  - 10 comprehensive test cases covering all rollover scenarios
+  - Fixed existing tests to handle new event signatures and error messages
+  - Used `ethers.provider.send` for blockchain time manipulation
+  - Verified gas efficiency and security of rollover mechanism
+- **Challenges encountered**:
+  - "Lottery still active" errors requiring time advancement
+  - Incorrect constructor arguments in test deployment
+  - Event parameter mismatches requiring test updates
+
+### Outcome
+
+#### Files Modified
+- **Smart Contract**: `packages/hardhat/contracts/YourContract.sol`
+  - Enhanced `_distributePrizes` function with rollover logic
+  - Added `JackpotRollover` event emission
+  - Updated `PrizeClaimed` event to include `lotteryId`
+  - Added `getJackpotInfo()` and `getUserPrize()` view functions
+  - Improved error handling in `claimPrize` function
+
+- **Test Suite Updates**: 
+  - `packages/hardhat/test/YourContract.ts` - Updated `PrizeClaimed` event expectations
+  - `packages/hardhat/test/AdvancedTests.ts` - Fixed "Prize already claimed" error message
+  - `packages/hardhat/test/JackpotRolloverTests.ts` - New 10-test comprehensive suite
+
+#### Testing Status
+- ✅ All 47+ tests passing with 0 failures
+- ✅ Jackpot rollover functionality fully verified
+- ✅ Event emission and error handling tested
+- ✅ Gas optimization confirmed within limits
+- ✅ Frontend integration maintained without errors
+
+#### Performance Impact
+- **Contract Size**: Maintained within 7% of block limit
+- **Gas Costs**: Rollover logic adds minimal overhead
+- **New Functions**: Efficient view functions for jackpot info
+- **Event Logging**: Comprehensive tracking for frontend integration
+
+### Technical Specifications
+
+#### Jackpot Rollover Features
+- **Automatic Accumulation**: Unclaimed prizes roll to next lottery
+- **Event Tracking**: `JackpotRollover` events for transparency
+- **Prize Prevention**: Cannot claim already claimed prizes
+- **View Functions**: Real-time jackpot and user prize information
+- **Admin Separation**: Admin fees calculated separately from rollover
+
+#### Enhanced Security
+- **Double-Claim Prevention**: Robust tracking of claimed prizes
+- **Accurate Accounting**: Separate tracking of fees vs. rollover amounts
+- **Event Transparency**: All rollover actions logged on-chain
+- **Gas Efficiency**: Optimized rollover calculations
+
+### Next Steps
+- **GitHub Integration**: Push all changes to main and dev branches
+- **Frontend Enhancement**: Integrate jackpot display and rollover notifications
+- **Documentation**: Update API docs with new functions and events
+- **Testnet Deployment**: Deploy enhanced contract for public testing
+- **User Experience**: Add rollover animations and jackpot counters
+
+### Lessons Learned
+- **Test Maintenance**: Event signature changes require comprehensive test updates
+- **Error Messages**: Consistent error handling improves debugging and UX
+- **Time Testing**: Blockchain time manipulation requires specific provider methods
+- **Constructor Testing**: Always verify contract deployment parameters in tests
+- **Rollover Logic**: Accumulating unclaimed prizes enhances lottery engagement
+
+---
+
+*This checkpoint represents a complete lottery system with advanced jackpot rollover functionality, ready for production deployment and enhanced user engagement.*
