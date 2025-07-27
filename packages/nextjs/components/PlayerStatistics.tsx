@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { useAccount } from "wagmi";
 import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
@@ -62,7 +62,7 @@ export const PlayerStatistics = () => {
   });
 
   // Calculate comprehensive statistics
-  const calculatePlayerStatistics = async () => {
+  const calculatePlayerStatistics = useCallback(async () => {
     if (!connectedAddress || !currentLotteryId || !ticketPrice) return;
 
     setIsLoading(true);
@@ -131,8 +131,8 @@ export const PlayerStatistics = () => {
               }
             }
           }
-        } catch (error) {
-          console.log(`No data for lottery ${lotteryId}`);
+        } catch (err) {
+          console.log(`No data for lottery ${lotteryId}`, err);
         }
       }
 
@@ -143,15 +143,15 @@ export const PlayerStatistics = () => {
       stats.averageTicketsPerLottery = stats.totalLotteriesParticipated > 0 ? stats.totalTicketsBought / stats.totalLotteriesParticipated : 0;
 
       setPlayerStats(stats);
-    } catch (error) {
-      console.error("Error calculating player statistics:", error);
+    } catch (err) {
+      console.error("Error calculating player statistics:", err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [connectedAddress, currentLotteryId, ticketPrice, pendingPrize]);
 
   // Calculate lottery-wide statistics
-  const calculateLotteryStatistics = async () => {
+  const calculateLotteryStatistics = useCallback(async () => {
     if (!currentLotteryId) return;
 
     try {
@@ -185,17 +185,17 @@ export const PlayerStatistics = () => {
               }
             }
           }
-        } catch (error) {
-          console.log(`No data for lottery ${lotteryId}`);
+        } catch (err) {
+          console.log(`No data for lottery ${lotteryId}`, err);
         }
       }
 
       stats.averagePrizePool = drawnLotteries > 0 ? totalPrizePoolSum / BigInt(drawnLotteries) : 0n;
       setLotteryStats(stats);
-    } catch (error) {
-      console.error("Error calculating lottery statistics:", error);
+    } catch (err) {
+      console.error("Error calculating lottery statistics:", err);
     }
-  };
+  }, [currentLotteryId, totalTicketsCount, jackpotRollover]);
 
   const countMatches = (userNumbers: number[], winningNumbers: number[]): number => {
     return userNumbers.filter(num => winningNumbers.includes(num)).length;
@@ -206,7 +206,7 @@ export const PlayerStatistics = () => {
       calculatePlayerStatistics();
       calculateLotteryStatistics();
     }
-  }, [connectedAddress, currentLotteryId, pendingPrize]);
+  }, [connectedAddress, currentLotteryId, calculatePlayerStatistics, calculateLotteryStatistics]);
 
   if (!connectedAddress) {
     return (

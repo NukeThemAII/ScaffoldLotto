@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { NextPage } from "next";
-import { formatEther, parseEther } from "viem";
+import { formatEther } from "viem";
 import { useAccount } from "wagmi";
 import { Address, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { AdminDashboard } from "~~/components/AdminDashboard";
@@ -92,7 +92,7 @@ const Home: NextPage = () => {
     return userNumbers.filter(num => winningNumbers.includes(num)).length;
   };
 
-  const initializeTickets = (quantity: number) => {
+  const initializeTickets = useCallback((quantity: number) => {
     const newTickets: number[][] = [];
     for (let i = 0; i < quantity; i++) {
       newTickets.push([]);
@@ -100,13 +100,13 @@ const Home: NextPage = () => {
     setTickets(newTickets);
     setCurrentTicketIndex(0);
     setSelectedNumbers([]);
-  };
+  }, []);
 
-  const updateCurrentTicket = (numbers: number[]) => {
+  const updateCurrentTicket = useCallback((numbers: number[]) => {
     const updatedTickets = [...tickets];
     updatedTickets[currentTicketIndex] = numbers;
     setTickets(updatedTickets);
-  };
+  }, [tickets, currentTicketIndex]);
 
   const fillRandomTicket = () => {
     const randomNumbers = generateRandomNumbers();
@@ -121,7 +121,7 @@ const Home: NextPage = () => {
   };
 
   // Check for claimable prizes from previous lotteries
-  const checkClaimablePrizes = async () => {
+  const checkClaimablePrizes = useCallback(async () => {
     if (!connectedAddress || !currentLotteryId) return;
     
     const claimable = [];
@@ -139,12 +139,12 @@ const Home: NextPage = () => {
             claimable.push({ lotteryId: i, tickets: previousUserTickets });
           }
         }
-      } catch (error) {
-        console.log(`No data for lottery ${i}`);
-      }
+      } catch (err) {
+          console.log(`No data for lottery ${i}`, err);
+        }
     }
     setClaimableTickets(claimable);
-  };
+  }, [connectedAddress, currentLotteryId]);
 
   // Watch for events
   useScaffoldWatchContractEvent({
@@ -179,15 +179,15 @@ const Home: NextPage = () => {
   // Effects
   useEffect(() => {
     initializeTickets(ticketQuantity);
-  }, [ticketQuantity]);
+  }, [ticketQuantity, initializeTickets]);
 
   useEffect(() => {
     updateCurrentTicket(selectedNumbers);
-  }, [selectedNumbers]);
+  }, [selectedNumbers, updateCurrentTicket]);
 
   useEffect(() => {
     checkClaimablePrizes();
-  }, [connectedAddress, currentLotteryId, previousUserTickets, winningNumbers]);
+  }, [checkClaimablePrizes]);
 
   const handleNumberSelect = (number: number) => {
     if (!connectedAddress) {
@@ -297,7 +297,6 @@ const Home: NextPage = () => {
   };
 
   const isLotteryActive = currentLottery && !currentLottery[5];
-  const nextDrawTime = currentLottery ? new Date(Number(currentLottery[2]) * 1000) : null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-teal-900">
@@ -718,7 +717,7 @@ const Home: NextPage = () => {
               <div className="text-center p-12">
                 <div className="text-8xl mb-6">💎</div>
                 <h3 className="text-2xl font-bold text-gray-400 mb-4">No Prizes to Claim</h3>
-                <p className="text-gray-500 mb-6">You don't have any unclaimed prizes at the moment.</p>
+                <p className="text-gray-500">You don&apos;t have any unclaimed prizes at the moment.</p>
                 <p className="text-gray-500 text-sm">Prizes will appear here automatically when you have winning tickets!</p>
               </div>
             )}
