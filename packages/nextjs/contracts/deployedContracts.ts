@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   31337: {
     KasplexLottery: {
-      address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+      address: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
       abi: [
         {
           inputs: [
@@ -45,6 +45,31 @@ const deployedContracts = {
             {
               indexed: true,
               internalType: "uint256",
+              name: "fromLotteryId",
+              type: "uint256",
+            },
+            {
+              indexed: true,
+              internalType: "uint256",
+              name: "toLotteryId",
+              type: "uint256",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "amount",
+              type: "uint256",
+            },
+          ],
+          name: "JackpotRollover",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: true,
+              internalType: "uint256",
               name: "lotteryId",
               type: "uint256",
             },
@@ -58,6 +83,12 @@ const deployedContracts = {
               indexed: false,
               internalType: "uint256",
               name: "totalPrizePool",
+              type: "uint256",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "jackpotContribution",
               type: "uint256",
             },
           ],
@@ -85,6 +116,12 @@ const deployedContracts = {
               name: "endTime",
               type: "uint256",
             },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "jackpotRollover",
+              type: "uint256",
+            },
           ],
           name: "LotteryStarted",
           type: "event",
@@ -102,6 +139,12 @@ const deployedContracts = {
               indexed: false,
               internalType: "uint256",
               name: "amount",
+              type: "uint256",
+            },
+            {
+              indexed: true,
+              internalType: "uint256",
+              name: "lotteryId",
               type: "uint256",
             },
           ],
@@ -353,6 +396,83 @@ const deployedContracts = {
           type: "function",
         },
         {
+          inputs: [],
+          name: "getJackpotInfo",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "currentJackpotRollover",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "currentLotteryJackpotContribution",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "totalCurrentPrizePool",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "lotteryId",
+              type: "uint256",
+            },
+          ],
+          name: "getLotteryDetails",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "id",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "startTime",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "endTime",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "totalPrizePool",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "totalTickets",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "totalDistributedPrizes",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "jackpotContribution",
+              type: "uint256",
+            },
+            {
+              internalType: "bool",
+              name: "drawn",
+              type: "bool",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
           inputs: [
             {
               internalType: "uint256",
@@ -505,6 +625,43 @@ const deployedContracts = {
           type: "function",
         },
         {
+          inputs: [
+            {
+              internalType: "address",
+              name: "player",
+              type: "address",
+            },
+            {
+              internalType: "uint256",
+              name: "lotteryId",
+              type: "uint256",
+            },
+          ],
+          name: "hasPrizeClaimed",
+          outputs: [
+            {
+              internalType: "bool",
+              name: "",
+              type: "bool",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "jackpotRollover",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
           inputs: [],
           name: "lastDrawTime",
           outputs: [
@@ -556,6 +713,16 @@ const deployedContracts = {
               internalType: "bool",
               name: "drawn",
               type: "bool",
+            },
+            {
+              internalType: "uint256",
+              name: "totalDistributedPrizes",
+              type: "uint256",
+            },
+            {
+              internalType: "uint256",
+              name: "jackpotContribution",
+              type: "uint256",
             },
           ],
           stateMutability: "view",
@@ -643,7 +810,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 3,
+      deployedOnBlock: 6,
     },
   },
 } as const;

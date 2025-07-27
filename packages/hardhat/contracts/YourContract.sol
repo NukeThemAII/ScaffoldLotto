@@ -22,6 +22,7 @@ contract KasplexLottery {
     address public immutable owner;
     uint256 public currentLotteryId;
     uint256 public lastDrawTime;
+    uint256 public jackpotRollover; // Accumulated unclaimed prizes from previous lotteries
     
     struct Ticket {
         address player;
@@ -37,9 +38,12 @@ contract KasplexLottery {
         uint256 totalTickets;
         uint8[5] winningNumbers;
         bool drawn;
+        uint256 totalDistributedPrizes; // Total prizes distributed to winners
+        uint256 jackpotContribution; // Amount added from rollover
         mapping(address => uint256[]) playerTickets; // player => ticket indices
         mapping(uint256 => uint256) matchWinners; // matches => count
         mapping(uint256 => uint256) matchPrizes; // matches => prize amount
+        mapping(address => bool) prizeClaimed; // Track if player claimed prize
     }
     
     // Storage
@@ -51,12 +55,13 @@ contract KasplexLottery {
     uint256 public adminBalance;
     
     // Events
-    event LotteryStarted(uint256 indexed lotteryId, uint256 startTime, uint256 endTime);
+    event LotteryStarted(uint256 indexed lotteryId, uint256 startTime, uint256 endTime, uint256 jackpotRollover);
     event TicketPurchased(uint256 indexed lotteryId, address indexed player, uint256 ticketId, uint8[5] numbers);
-    event LotteryDrawn(uint256 indexed lotteryId, uint8[5] winningNumbers, uint256 totalPrizePool);
+    event LotteryDrawn(uint256 indexed lotteryId, uint8[5] winningNumbers, uint256 totalPrizePool, uint256 jackpotContribution);
     event PrizeDistributed(uint256 indexed lotteryId, uint256 matches, uint256 winners, uint256 prizePerWinner);
-    event PrizeClaimed(address indexed player, uint256 amount);
+    event PrizeClaimed(address indexed player, uint256 amount, uint256 indexed lotteryId);
     event AdminFeesWithdrawn(address indexed admin, uint256 amount);
+    event JackpotRollover(uint256 indexed fromLotteryId, uint256 indexed toLotteryId, uint256 amount);
     
     // Constructor
     constructor(address _owner) {
@@ -152,7 +157,10 @@ contract KasplexLottery {
         // Distribute prizes
         _distributePrizes(currentLotteryId);
         
-        emit LotteryDrawn(currentLotteryId, winningNumbers, lottery.totalPrizePool);
+        // Calculate and process jackpot rollover
+        _processJackpotRollover(currentLotteryId);
+        
+        emit LotteryDrawn(currentLotteryId, winningNumbers, lottery.totalPrizePool, lottery.jackpotContribution);
     }
     
     /**
@@ -202,7 +210,7 @@ contract KasplexLottery {
     }
     
     /**
-     * @dev Distribute prizes based on match levels
+     * @dev Distribute prizes based on match levels with jackpot rollover
      */
     function _distributePrizes(uint256 lotteryId) internal {
         Lottery storage lottery = lotteries[lotteryId];
@@ -211,16 +219,22 @@ contract KasplexLottery {
         // Prize distribution: 5 matches: 50%, 4 matches: 30%, 3 matches: 15%, 2 matches: 5%
         uint256[6] memory prizePercentages = [uint256(0), uint256(0), uint256(5), uint256(15), uint256(30), uint256(50)]; // Index = matches
         
+        uint256 totalDistributed = 0;
+        
         for (uint256 matches = 2; matches <= 5; matches++) {
             uint256 winners = lottery.matchWinners[matches];
             if (winners > 0) {
                 uint256 totalPrizeForLevel = (totalPrizePool * prizePercentages[matches]) / 100;
                 uint256 prizePerWinner = totalPrizeForLevel / winners;
                 lottery.matchPrizes[matches] = prizePerWinner;
+                totalDistributed += totalPrizeForLevel;
                 
                 emit PrizeDistributed(lotteryId, matches, winners, prizePerWinner);
             }
         }
+        
+        // Store total distributed prizes for rollover calculation
+        lottery.totalDistributedPrizes = totalDistributed;
         
         // Distribute prizes to winners
         for (uint256 i = 0; i < lottery.totalTickets; i++) {
@@ -230,6 +244,21 @@ contract KasplexLottery {
                     pendingWithdrawals[tickets[i].player] += lottery.matchPrizes[matches];
                 }
             }
+        }
+    }
+    
+    /**
+     * @dev Process jackpot rollover by calculating unclaimed prizes
+     */
+    function _processJackpotRollover(uint256 lotteryId) internal {
+        Lottery storage lottery = lotteries[lotteryId];
+        
+        // Calculate unclaimed prizes (total prize pool - distributed prizes - admin fees already deducted)
+        uint256 unclaimedPrizes = lottery.totalPrizePool - lottery.totalDistributedPrizes;
+        
+        // Add unclaimed prizes to jackpot rollover for next lottery
+        if (unclaimedPrizes > 0) {
+            jackpotRollover += unclaimedPrizes;
         }
     }
     
@@ -250,7 +279,7 @@ contract KasplexLottery {
     }
     
     /**
-     * @dev Start a new lottery
+     * @dev Start a new lottery with jackpot rollover
      */
     function _startNewLottery() internal {
         currentLotteryId++;
@@ -263,9 +292,18 @@ contract KasplexLottery {
         newLottery.endTime = endTime;
         newLottery.drawn = false;
         
+        // Add jackpot rollover to new lottery
+        if (jackpotRollover > 0) {
+            newLottery.totalPrizePool += jackpotRollover;
+            newLottery.jackpotContribution = jackpotRollover;
+            
+            emit JackpotRollover(currentLotteryId - 1, currentLotteryId, jackpotRollover);
+            jackpotRollover = 0; // Reset rollover after adding to new lottery
+        }
+        
         lastDrawTime = startTime;
         
-        emit LotteryStarted(currentLotteryId, startTime, endTime);
+        emit LotteryStarted(currentLotteryId, startTime, endTime, newLottery.jackpotContribution);
     }
     
     /**
@@ -288,23 +326,21 @@ contract KasplexLottery {
      */
     function claimPrize(uint256 lotteryId) external {
         require(lotteries[lotteryId].drawn, "Lottery not drawn yet");
+        require(!lotteries[lotteryId].prizeClaimed[msg.sender], "Prize already claimed for this lottery");
+        
         uint256 amount = getUserPrize(msg.sender, lotteryId);
         require(amount > 0, "No prize to claim");
         
-        // Mark prize as claimed
-        for (uint256 i = 0; i < lotteries[lotteryId].totalTickets; i++) {
-            if (tickets[i].lotteryId == lotteryId && tickets[i].player == msg.sender) {
-                uint256 matches = _countMatches(tickets[i].numbers, lotteries[lotteryId].winningNumbers);
-                if (matches >= 2) {
-                    pendingWithdrawals[msg.sender] -= lotteries[lotteryId].matchPrizes[matches];
-                }
-            }
-        }
+        // Mark prize as claimed for this lottery
+        lotteries[lotteryId].prizeClaimed[msg.sender] = true;
+        
+        // Deduct from pending withdrawals
+        pendingWithdrawals[msg.sender] -= amount;
         
         (bool success, ) = msg.sender.call{value: amount}("");
         require(success, "Prize transfer failed");
         
-        emit PrizeClaimed(msg.sender, amount);
+        emit PrizeClaimed(msg.sender, amount, lotteryId);
     }
     
     /**
@@ -339,6 +375,19 @@ contract KasplexLottery {
             lottery.totalPrizePool,
             lottery.totalTickets,
             lottery.drawn
+        );
+    }
+    
+    function getJackpotInfo() external view returns (
+        uint256 currentJackpotRollover,
+        uint256 currentLotteryJackpotContribution,
+        uint256 totalCurrentPrizePool
+    ) {
+        Lottery storage lottery = lotteries[currentLotteryId];
+        return (
+            jackpotRollover,
+            lottery.jackpotContribution,
+            lottery.totalPrizePool
         );
     }
     
@@ -392,6 +441,33 @@ contract KasplexLottery {
             return 0;
         }
         return endTime - block.timestamp;
+    }
+    
+    function hasPrizeClaimed(address player, uint256 lotteryId) external view returns (bool) {
+        return lotteries[lotteryId].prizeClaimed[player];
+    }
+    
+    function getLotteryDetails(uint256 lotteryId) external view returns (
+        uint256 id,
+        uint256 startTime,
+        uint256 endTime,
+        uint256 totalPrizePool,
+        uint256 totalTickets,
+        uint256 totalDistributedPrizes,
+        uint256 jackpotContribution,
+        bool drawn
+    ) {
+        Lottery storage lottery = lotteries[lotteryId];
+        return (
+            lottery.id,
+            lottery.startTime,
+            lottery.endTime,
+            lottery.totalPrizePool,
+            lottery.totalTickets,
+            lottery.totalDistributedPrizes,
+            lottery.jackpotContribution,
+            lottery.drawn
+        );
     }
     
     /**

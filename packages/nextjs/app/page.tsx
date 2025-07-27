@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { NextPage } from "next";
+import { formatEther, parseEther } from "viem";
 import { useAccount } from "wagmi";
-import { parseEther, formatEther } from "viem";
 import { Address } from "~~/components/scaffold-eth";
 import {
   useScaffoldReadContract,
-  useScaffoldWriteContract,
   useScaffoldWatchContractEvent,
+  useScaffoldWriteContract,
 } from "~~/hooks/scaffold-eth";
 
 const Home: NextPage = () => {
@@ -143,31 +143,44 @@ const Home: NextPage = () => {
             <div className="flex flex-col bg-base-100 px-6 py-6 text-center items-center max-w-md rounded-3xl">
               <h2 className="text-2xl font-bold mb-4">🎯 Current Lottery</h2>
               <div className="space-y-2 text-left w-full">
-                <p><strong>Lottery ID:</strong> {currentLotteryId?.toString() || "Loading..."}</p>
-                <p><strong>Status:</strong> {isLotteryActive ? "🟢 Active" : "🔴 Drawn"}</p>
-                <p><strong>Ticket Price:</strong> {ticketPrice ? formatEther(ticketPrice) : "Loading..."} KAS</p>
-                <p><strong>Prize Pool:</strong> {currentLottery ? formatEther(currentLottery[2]) : "Loading..."} KAS</p>
+                <p>
+                  <strong>Lottery ID:</strong> {currentLotteryId?.toString() || "Loading..."}
+                </p>
+                <p>
+                  <strong>Status:</strong> {isLotteryActive ? "🟢 Active" : "🔴 Drawn"}
+                </p>
+                <p>
+                  <strong>Ticket Price:</strong> {ticketPrice ? formatEther(ticketPrice) : "Loading..."} KAS
+                </p>
+                <p>
+                  <strong>Prize Pool:</strong> {currentLottery ? formatEther(currentLottery[2]) : "Loading..."} KAS
+                </p>
                 {nextDrawTime && (
-                  <p><strong>Next Draw:</strong> {nextDrawTime.toLocaleString()}</p>
+                  <p>
+                    <strong>Next Draw:</strong> {nextDrawTime.toLocaleString()}
+                  </p>
                 )}
-                {currentLottery && currentLottery[1] === 1 && ( // status === Drawn
-                  <div>
-                    <p><strong>Winning Numbers:</strong></p>
-                    <div className="flex gap-2 justify-center mt-2">
-                      {currentLottery[4]?.map((num: bigint, index: number) => (
-                        <div key={index} className="w-8 h-8 bg-primary text-primary-content rounded-full flex items-center justify-center font-bold">
-                          {num.toString()}
-                        </div>
-                      ))}
+                {currentLottery &&
+                  currentLottery[1] === 1 && ( // status === Drawn
+                    <div>
+                      <p>
+                        <strong>Winning Numbers:</strong>
+                      </p>
+                      <div className="flex gap-2 justify-center mt-2">
+                        {currentLottery[4]?.map((num: bigint, index: number) => (
+                          <div
+                            key={index}
+                            className="w-8 h-8 bg-primary text-primary-content rounded-full flex items-center justify-center font-bold"
+                          >
+                            {num.toString()}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
               </div>
               {isLotteryActive && (
-                <button
-                  className="btn btn-secondary mt-4"
-                  onClick={handleDrawLottery}
-                >
+                <button className="btn btn-secondary mt-4" onClick={handleDrawLottery}>
                   🎲 Draw Lottery (Admin)
                 </button>
               )}
@@ -177,7 +190,7 @@ const Home: NextPage = () => {
             <div className="flex flex-col bg-base-100 px-6 py-6 text-center items-center max-w-md rounded-3xl">
               <h2 className="text-2xl font-bold mb-4">🎫 Buy Ticket</h2>
               <p className="mb-4">Select 5 numbers (1-35):</p>
-              
+
               <div className="grid grid-cols-7 gap-2 mb-4">
                 {Array.from({ length: 35 }, (_, i) => i + 1).map(number => (
                   <button
@@ -194,12 +207,16 @@ const Home: NextPage = () => {
                   </button>
                 ))}
               </div>
-              
+
               <div className="mb-4">
-                <p><strong>Selected:</strong> {selectedNumbers.join(", ") || "None"}</p>
-                <p><strong>Numbers selected:</strong> {selectedNumbers.length}/5</p>
+                <p>
+                  <strong>Selected:</strong> {selectedNumbers.join(", ") || "None"}
+                </p>
+                <p>
+                  <strong>Numbers selected:</strong> {selectedNumbers.length}/5
+                </p>
               </div>
-              
+
               <button
                 className="btn btn-primary"
                 onClick={handleBuyTicket}
@@ -212,15 +229,20 @@ const Home: NextPage = () => {
             {/* User Tickets & Prize Claim */}
             <div className="flex flex-col bg-base-100 px-6 py-6 text-center items-center max-w-md rounded-3xl">
               <h2 className="text-2xl font-bold mb-4">🎟️ Your Tickets</h2>
-              
+
               {userTickets && userTickets.length > 0 ? (
                 <div className="space-y-2 mb-4 w-full">
-                  <p><strong>Current Lottery Tickets:</strong></p>
+                  <p>
+                    <strong>Current Lottery Tickets:</strong>
+                  </p>
                   {userTickets.map((ticket: any, index: number) => (
                     <div key={index} className="bg-base-200 p-2 rounded">
                       <div className="flex gap-1 justify-center">
                         {ticket.map((num: bigint, numIndex: number) => (
-                          <div key={numIndex} className="w-6 h-6 bg-accent text-accent-content rounded-full flex items-center justify-center text-xs font-bold">
+                          <div
+                            key={numIndex}
+                            className="w-6 h-6 bg-accent text-accent-content rounded-full flex items-center justify-center text-xs font-bold"
+                          >
                             {num.toString()}
                           </div>
                         ))}
@@ -231,24 +253,22 @@ const Home: NextPage = () => {
               ) : (
                 <p className="mb-4">No tickets for current lottery</p>
               )}
-              
+
               <div className="divider">Prize Claim</div>
-              
+
               <div className="space-y-2 w-full">
                 <input
                   type="number"
                   placeholder="Lottery ID to claim"
                   className="input input-bordered w-full"
                   value={claimLotteryId}
-                  onChange={(e) => setClaimLotteryId(e.target.value)}
+                  onChange={e => setClaimLotteryId(e.target.value)}
                 />
-                
+
                 {userPrize && userPrize > 0n && (
-                  <p className="text-success font-bold">
-                    💰 Prize Available: {formatEther(userPrize)} KAS
-                  </p>
+                  <p className="text-success font-bold">💰 Prize Available: {formatEther(userPrize)} KAS</p>
                 )}
-                
+
                 <button
                   className="btn btn-success w-full"
                   onClick={handleClaimPrize}

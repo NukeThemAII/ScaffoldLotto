@@ -180,7 +180,7 @@ describe("KasplexLottery", function () {
        if (prize > 0) {
          await expect(kasplexLottery.connect(player1).claimPrize(1))
            .to.emit(kasplexLottery, "PrizeClaimed")
-           .withArgs(player1.address, prize);
+           .withArgs(player1.address, prize, 1);
        }
     });
 
@@ -195,8 +195,8 @@ describe("KasplexLottery", function () {
       await kasplexLottery.drawLottery();
       
       // Try to claim with an address that has no winning tickets
-       await expect(kasplexLottery.connect(player3).claimPrize(1))
-         .to.be.revertedWith("No prize to claim");
+      await expect(kasplexLottery.connect(player3).claimPrize(1))
+        .to.be.revertedWith("No prize to claim");
     });
   });
 
