@@ -1,0 +1,514 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
+
+/**
+ * @title EnhancedLotteryV2 - A Sustainable & Autonomous Lottery Protocol
+ * @dev This contract is designed to be a perpetual, self-sustaining lottery.
+ * It removes all centralized operational functions. Draws are executed automatically
+ * by players, and admin fees are distributed instantly, creating a truly autonomous system.
+ * @author Gemini
+ * @version 2.0.0
+ *
+ * Key Architectural Changes:
+ * - NO `executeDraw()` function. Draw execution is integrated into `purchaseTickets`.
+ * - NO centralized fee balance. Admin fees are sent to the owner on each purchase.
+ * - NO pausable functions. The contract is designed to run perpetually.
+ * - UUPS Upgradeable for long-term maintenance and bug fixes by the owner (DAO/Multi-sig recommended).
+ * - Automated executor reward to incentivize decentralized draw execution.
+ */
+contract EnhancedLotteryV2 is
+    Initializable,
+    UUPSUpgradeable,
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
+    using Math for uint256;
+
+    // ============ CONSTANTS ============
+
+    // --- Lottery Parameters ---
+    uint256 public constant TICKET_PRICE = 0.1 ether;
+    uint256 public constant NUMBERS_PER_TICKET = 5;
+    uint256 public constant MIN_NUMBER = 1;
+    uint256 public constant MAX_NUMBER = 35;
+    uint256 public constant MAX_TICKETS_PER_BATCH = 50; // Gas optimization
+
+    // --- Timing Configuration (2 draws per week) ---
+    uint256 public constant DRAW_INTERVAL = 3.5 days; // 3 days and 12 hours
+
+    // --- Economic Model (basis points) ---
+    uint256 public constant ADMIN_FEE_PERCENTAGE = 100; // 1%
+    uint256 public constant EXECUTOR_REWARD_PERCENTAGE = 25; // 0.25%
+    uint256 public constant MIN_EXECUTOR_REWARD = 0.05 ether;
+    uint256 public constant MAX_EXECUTOR_REWARD = 10 ether;
+
+    // --- Prize Distribution (basis points of the remaining 99%) ---
+    // Total prize percentage = 5000 + 2500 + 1500 + 900 = 9900 (99% of prize pool)
+    uint256 public constant JACKPOT_PERCENTAGE = 5000; // 50%
+    uint256 public constant SECOND_PRIZE_PERCENTAGE = 2500; // 25%
+    uint256 public constant THIRD_PRIZE_PERCENTAGE = 1500; // 15%
+    uint256 public constant FOURTH_PRIZE_PERCENTAGE = 900; // 9%
+
+    // ============ STRUCTS ============
+
+    struct Ticket {
+        address player;
+        uint256[NUMBERS_PER_TICKET] numbers;
+        uint256 drawId;
+        bool claimed;
+        uint256 purchaseTime;
+        uint256 prizeAmount;
+        uint8 matchCount;
+    }
+
+    struct Draw {
+        uint256 id;
+        uint256[NUMBERS_PER_TICKET] winningNumbers;
+        uint256 timestamp;
+        uint256 totalPrizePool; // Prize pool at the time of draw
+        uint256 jackpotAmount; // Total prize for 5-match winners
+        uint256 executorReward;
+        address executor;
+        bool executed;
+        uint256 totalTickets;
+        uint256 randomSeed;
+        uint256[4] winnerCounts; // [5, 4, 3, 2] matches
+        uint256[4] prizeAmounts; // Prize per winner for each tier
+    }
+
+    struct Analytics {
+        uint256 totalDraws;
+        uint256 totalTicketsSold;
+        uint256 totalPrizesDistributed;
+        uint256 totalAdminFees;
+        uint256 totalExecutorRewards;
+        uint256 totalPlayers;
+        uint256 totalVolume; // Total ETH spent on tickets
+    }
+
+    // ============ STATE VARIABLES ============
+
+    uint256 public currentDrawId;
+    uint256 public accumulatedPrizePool;
+    uint256 public prizeReserveBalance; // Separate balance for claimed prizes
+
+    // --- Timing ---
+    uint256 public nextDrawTime;
+
+    // --- Counters ---
+    uint256 private ticketCounter;
+    uint256 private randomNonce;
+
+    // --- Analytics ---
+    Analytics public analytics;
+
+    // --- Mappings ---
+    mapping(uint256 => Draw) public draws;
+    mapping(uint256 => Ticket) public tickets;
+    mapping(uint256 => uint256[]) public drawTickets;
+    mapping(address => uint256[]) public playerTickets;
+    mapping(address => bool) public hasPlayed;
+
+    // ============ EVENTS ============
+
+    event TicketsPurchased(
+        address indexed player,
+        uint256 indexed drawId,
+        uint256[] ticketIds,
+        uint256 totalCost
+    );
+
+    event DrawExecuted(
+        uint256 indexed drawId,
+        uint256[NUMBERS_PER_TICKET] winningNumbers,
+        uint256 totalPrizePool,
+        address indexed executor,
+        uint256 executorReward
+    );
+
+    event PrizesClaimed(
+        address indexed player,
+        uint256[] ticketIds,
+        uint256 totalAmount
+    );
+
+    event AdminFeeDistributed(
+        address indexed owner,
+        uint256 amount
+    );
+
+    // ============ INITIALIZATION ============
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address _initialOwner) public initializer {
+        __Ownable_init(_initialOwner);
+        __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
+
+        currentDrawId = 1;
+        ticketCounter = 1;
+        randomNonce = 1;
+        nextDrawTime = block.timestamp + DRAW_INTERVAL;
+    }
+
+    // ============ CORE FUNCTIONS ============
+
+    /**
+     * @notice Purchase lottery tickets. If the draw interval has passed,
+     * this function will also trigger the execution of the previous draw.
+     * @param _ticketNumbers An array of tickets, where each ticket is an array of 5 numbers.
+     */
+    function purchaseTickets(
+        uint256[NUMBERS_PER_TICKET][] calldata _ticketNumbers
+    ) external payable nonReentrant {
+        require(_ticketNumbers.length > 0, "Must purchase at least one ticket");
+        require(_ticketNumbers.length <= MAX_TICKETS_PER_BATCH, "Exceeds max tickets per batch");
+
+        uint256 totalCost = TICKET_PRICE * _ticketNumbers.length;
+        require(msg.value == totalCost, "Incorrect payment amount");
+
+        // --- Autonomous Draw Execution ---
+        if (block.timestamp >= nextDrawTime) {
+            _executeDraw(msg.sender);
+        }
+
+        // --- Fee Distribution & Prize Pool Calculation ---
+        uint256 adminFee = (totalCost * ADMIN_FEE_PERCENTAGE) / 10000;
+        uint256 prizePoolAddition = totalCost - adminFee;
+
+        if (adminFee > 0) {
+            (bool success, ) = owner().call{value: adminFee}("");
+            require(success, "Admin fee transfer failed");
+            analytics.totalAdminFees += adminFee;
+            emit AdminFeeDistributed(owner(), adminFee);
+        }
+
+        accumulatedPrizePool += prizePoolAddition;
+
+        // --- Ticket Validation and Creation ---
+        uint256[] memory newTicketIds = new uint256[](_ticketNumbers.length);
+        for (uint256 i = 0; i < _ticketNumbers.length; i++) {
+            _validateTicketNumbers(_ticketNumbers[i]);
+
+            uint256 ticketId = ticketCounter++;
+            newTicketIds[i] = ticketId;
+
+            Ticket storage ticket = tickets[ticketId];
+            ticket.player = msg.sender;
+            ticket.drawId = currentDrawId;
+            ticket.purchaseTime = block.timestamp;
+
+            for (uint256 j = 0; j < NUMBERS_PER_TICKET; j++) {
+                ticket.numbers[j] = _ticketNumbers[i][j];
+            }
+
+            drawTickets[currentDrawId].push(ticketId);
+            playerTickets[msg.sender].push(ticketId);
+        }
+
+        // --- Analytics and State Updates ---
+        if (!hasPlayed[msg.sender]) {
+            hasPlayed[msg.sender] = true;
+            analytics.totalPlayers++;
+        }
+        analytics.totalTicketsSold += _ticketNumbers.length;
+        analytics.totalVolume += totalCost;
+
+        emit TicketsPurchased(msg.sender, currentDrawId, newTicketIds, totalCost);
+    }
+
+    /**
+     * @notice Allows players to claim prizes for their winning tickets.
+     * @param _ticketIds An array of ticket IDs to claim prizes for.
+     */
+    function claimPrizes(uint256[] calldata _ticketIds) external nonReentrant {
+        require(_ticketIds.length > 0, "No tickets to claim");
+        require(_ticketIds.length <= 50, "Too many tickets to claim in one batch");
+
+        uint256 totalPrize = 0;
+        for (uint256 i = 0; i < _ticketIds.length; i++) {
+            uint256 ticketId = _ticketIds[i];
+            require(ticketId > 0 && ticketId < ticketCounter, "Invalid ticket ID");
+
+            Ticket storage ticket = tickets[ticketId];
+            require(ticket.player == msg.sender, "Not ticket owner");
+            require(!ticket.claimed, "Prize already claimed");
+            require(draws[ticket.drawId].executed, "Draw not yet executed");
+
+            uint256 prizeAmount = _calculateTicketPrize(ticketId);
+            if (prizeAmount > 0) {
+                ticket.claimed = true;
+                ticket.prizeAmount = prizeAmount;
+                totalPrize += prizeAmount;
+            }
+        }
+
+        require(totalPrize > 0, "No prizes to claim for these tickets");
+        require(prizeReserveBalance >= totalPrize, "Insufficient prize reserve");
+
+        prizeReserveBalance -= totalPrize;
+        analytics.totalPrizesDistributed += totalPrize;
+
+        (bool success, ) = msg.sender.call{value: totalPrize}("");
+        require(success, "Prize transfer failed");
+
+        emit PrizesClaimed(msg.sender, _ticketIds, totalPrize);
+    }
+
+    // ============ INTERNAL FUNCTIONS ============
+
+    /**
+     * @dev Internal function to execute a draw. Called by a player.
+     * @param _executor The address of the player triggering the draw.
+     */
+    function _executeDraw(address _executor) internal {
+        // Ensure there were tickets sold for the draw being executed
+        if (drawTickets[currentDrawId].length == 0) {
+            // No tickets sold, just roll over the time
+            nextDrawTime = block.timestamp + DRAW_INTERVAL;
+            return;
+        }
+
+        (uint256[NUMBERS_PER_TICKET] memory winningNumbers, uint256 randomSeed) =
+            _generateSecureRandomNumbers();
+
+        uint256 executorReward = _calculateExecutorReward(accumulatedPrizePool);
+        uint256 effectivePrizePool = accumulatedPrizePool - executorReward;
+
+        Draw storage draw = draws[currentDrawId];
+        draw.id = currentDrawId;
+        draw.timestamp = block.timestamp;
+        draw.totalPrizePool = accumulatedPrizePool;
+        draw.executorReward = executorReward;
+        draw.executed = true;
+        draw.executor = _executor;
+        draw.totalTickets = drawTickets[currentDrawId].length;
+        draw.randomSeed = randomSeed;
+        draw.winningNumbers = winningNumbers;
+
+        _processWinners(currentDrawId, winningNumbers, effectivePrizePool);
+
+        uint256 distributedPrizes = _calculateTotalDistributedPrizes(currentDrawId);
+        uint256 rolloverAmount = effectivePrizePool - distributedPrizes;
+
+        if (executorReward > 0) {
+            (bool success, ) = _executor.call{value: executorReward}("");
+            require(success, "Executor reward transfer failed");
+        }
+
+        prizeReserveBalance += distributedPrizes;
+
+        // --- Update Analytics ---
+        analytics.totalDraws++;
+        analytics.totalExecutorRewards += executorReward;
+        if (draw.jackpotAmount > 0) {
+             // A simple average calculation can be added here if needed
+        }
+
+        emit DrawExecuted(
+            currentDrawId,
+            winningNumbers,
+            accumulatedPrizePool,
+            _executor,
+            executorReward
+        );
+
+        // --- Reset for Next Draw ---
+        accumulatedPrizePool = rolloverAmount;
+        nextDrawTime = block.timestamp + DRAW_INTERVAL;
+        currentDrawId++;
+    }
+
+    /**
+     * @dev Processes all tickets for a given draw to count winners and calculate prize amounts.
+     */
+    function _processWinners(
+        uint256 _drawId,
+        uint256[NUMBERS_PER_TICKET] memory _winningNumbers,
+        uint256 _prizePool
+    ) internal {
+        Draw storage draw = draws[_drawId];
+        uint256[] memory ticketIds = drawTickets[_drawId];
+
+        for (uint256 i = 0; i < ticketIds.length; i++) {
+            uint256 matches = _countMatches(tickets[ticketIds[i]].numbers, _winningNumbers);
+            tickets[ticketIds[i]].matchCount = uint8(matches);
+            if (matches >= 2) {
+                draw.winnerCounts[5 - matches]++;
+            }
+        }
+
+        uint256[4] memory prizePoolDistribution = [
+            (_prizePool * JACKPOT_PERCENTAGE) / 10000,
+            (_prizePool * SECOND_PRIZE_PERCENTAGE) / 10000,
+            (_prizePool * THIRD_PRIZE_PERCENTAGE) / 10000,
+            (_prizePool * FOURTH_PRIZE_PERCENTAGE) / 10000
+        ];
+
+        for (uint256 i = 0; i < 4; i++) {
+            if (draw.winnerCounts[i] > 0) {
+                draw.prizeAmounts[i] = prizePoolDistribution[i] / draw.winnerCounts[i];
+            }
+        }
+
+        draw.jackpotAmount = prizePoolDistribution[0];
+    }
+
+    /**
+     * @dev Generates pseudo-random numbers using on-chain data.
+     * NOTE: For production, consider a more robust solution like Chainlink VRF.
+     */
+    function _generateSecureRandomNumbers()
+        internal
+        returns (uint256[NUMBERS_PER_TICKET] memory, uint256)
+    {
+        randomNonce++;
+        uint256 randomSeed = uint256(
+            keccak256(
+                abi.encodePacked(
+                    block.timestamp,
+                    block.prevrandao,
+                    msg.sender,
+                    randomNonce,
+                    address(this).balance
+                )
+            )
+        );
+
+        uint256[NUMBERS_PER_TICKET] memory selectedNumbers;
+        uint256[] memory availableNumbers = new uint256[](MAX_NUMBER);
+        for (uint256 i = 0; i < MAX_NUMBER; i++) {
+            availableNumbers[i] = i + MIN_NUMBER;
+        }
+
+        uint256 remainingCount = MAX_NUMBER;
+        for (uint256 i = 0; i < NUMBERS_PER_TICKET; i++) {
+            uint256 entropy = uint256(keccak256(abi.encodePacked(randomSeed, i)));
+            uint256 randomIndex = entropy % remainingCount;
+            selectedNumbers[i] = availableNumbers[randomIndex];
+            availableNumbers[randomIndex] = availableNumbers[remainingCount - 1];
+            remainingCount--;
+        }
+
+        _sortNumbers(selectedNumbers);
+        return (selectedNumbers, randomSeed);
+    }
+
+    // ============ HELPER & VIEW FUNCTIONS ============
+
+    function _validateTicketNumbers(uint256[NUMBERS_PER_TICKET] memory _numbers) internal pure {
+        for (uint256 i = 0; i < NUMBERS_PER_TICKET; i++) {
+            require(_numbers[i] >= MIN_NUMBER && _numbers[i] <= MAX_NUMBER, "Number out of range");
+            for (uint256 j = i + 1; j < NUMBERS_PER_TICKET; j++) {
+                require(_numbers[i] != _numbers[j], "Duplicate numbers in ticket");
+            }
+        }
+    }
+
+    function _calculateExecutorReward(uint256 _jackpotAmount) internal pure returns (uint256) {
+        uint256 reward = (_jackpotAmount * EXECUTOR_REWARD_PERCENTAGE) / 10000;
+        return Math.min(Math.max(reward, MIN_EXECUTOR_REWARD), MAX_EXECUTOR_REWARD);
+    }
+
+    function _calculateTicketPrize(uint256 _ticketId) internal view returns (uint256) {
+        Ticket storage ticket = tickets[_ticketId];
+        if (ticket.matchCount >= 2) {
+            uint256 prizeIndex = 5 - ticket.matchCount;
+            return draws[ticket.drawId].prizeAmounts[prizeIndex];
+        }
+        return 0;
+    }
+
+    function _calculateTotalDistributedPrizes(uint256 _drawId) internal view returns (uint256) {
+        Draw storage draw = draws[_drawId];
+        uint256 total = 0;
+        for (uint256 i = 0; i < 4; i++) {
+            total += draw.winnerCounts[i] * draw.prizeAmounts[i];
+        }
+        return total;
+    }
+
+    function _countMatches(
+        uint256[NUMBERS_PER_TICKET] memory _ticketNumbers,
+        uint256[NUMBERS_PER_TICKET] memory _winningNumbers
+    ) internal pure returns (uint256) {
+        uint256 matches = 0;
+        for (uint256 i = 0; i < NUMBERS_PER_TICKET; i++) {
+            for (uint256 j = 0; j < NUMBERS_PER_TICKET; j++) {
+                if (_ticketNumbers[i] == _winningNumbers[j]) {
+                    matches++;
+                    break;
+                }
+            }
+        }
+        return matches;
+    }
+
+    function _sortNumbers(uint256[NUMBERS_PER_TICKET] memory _numbers) internal pure {
+        for (uint256 i = 0; i < NUMBERS_PER_TICKET - 1; i++) {
+            for (uint256 j = 0; j < NUMBERS_PER_TICKET - i - 1; j++) {
+                if (_numbers[j] > _numbers[j + 1]) {
+                    (_numbers[j], _numbers[j + 1]) = (_numbers[j + 1], _numbers[j]);
+                }
+            }
+        }
+    }
+
+    /**
+     * @notice Returns key information about the current state of the lottery.
+     */
+    function getLotteryInfo() external view returns (
+        uint256 _currentDrawId,
+        uint256 _nextDrawTimestamp,
+        uint256 _currentPrizePool,
+        uint256 _ticketsSoldForCurrentDraw
+    ) {
+        return (
+            currentDrawId,
+            nextDrawTime,
+            accumulatedPrizePool,
+            drawTickets[currentDrawId].length
+        );
+    }
+
+    /**
+     * @notice Returns detailed information about a past draw.
+     */
+    function getDraw(uint256 _drawId) external view returns (Draw memory) {
+        require(_drawId > 0 && _drawId < currentDrawId, "Invalid draw ID");
+        return draws[_drawId];
+    }
+
+    /**
+     * @notice Returns detailed information about a specific ticket.
+     */
+    function getTicket(uint256 _ticketId) external view returns (Ticket memory) {
+        require(_ticketId > 0 && _ticketId < ticketCounter, "Invalid ticket ID");
+        return tickets[_ticketId];
+    }
+
+    // ============ UPGRADEABILITY ============
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    function getVersion() external pure returns (string memory) {
+        return "2.0.0";
+    }
+
+    // ============ FALLBACK ============
+
+    receive() external payable {
+        // Accept donations to the prize pool
+        accumulatedPrizePool += msg.value;
+    }
+}

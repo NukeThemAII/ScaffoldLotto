@@ -21,6 +21,8 @@
 - 📱 **Modern UI**: Responsive design with real-time updates
 - 🔐 **Wallet Integration**: Connect with MetaMask and other Web3 wallets
 - 🎰 **Jackpot Rollover**: Unclaimed prizes automatically roll over to next lottery
+- 📊 **Player Statistics**: Comprehensive analytics showing tickets bought, KAS spent/won, win rates
+- ⚙️ **Admin Dashboard**: Contract owner interface for fee management and system monitoring
 - 🧪 **Comprehensive Testing**: 47+ test cases covering all functionality including rollover
 
 ## Smart Contract
@@ -97,7 +99,62 @@ The frontend (`packages/nextjs/app/page.tsx`) provides:
 - **Lottery Information**: Current lottery ID, prize pool, time until draw
 - **Ticket Management**: View purchased tickets and track prizes
 - **Prize Claiming**: One-click prize claiming for winning tickets
+- **Player Statistics**: Detailed analytics and performance metrics
+- **Admin Dashboard**: Contract management interface for owners
 - **Real-time Updates**: Live countdown and lottery status
+
+### Navigation Tabs
+
+1. **🎮 Play**: Main lottery interface for number selection and ticket purchase
+2. **📊 Results**: View lottery results and winning numbers
+3. **🏆 Prizes**: Claim winnings and view prize history
+4. **📈 Statistics**: Comprehensive player analytics and global lottery stats
+5. **⚙️ Admin**: Contract owner dashboard for fee management
+
+### Player Statistics Dashboard
+
+The statistics tab provides extensive on-chain data analysis:
+
+#### Personal Statistics
+- **Total Tickets Bought**: Complete ticket purchase history
+- **Total KAS Spent**: Cumulative amount invested in lottery tickets
+- **Total KAS Won**: All prizes claimed across all lotteries
+- **Profit/Loss**: Net gain/loss calculation with color-coded display
+- **Win Rate**: Percentage of tickets that won prizes
+- **Winning Tickets**: Count of tickets that matched 2+ numbers
+- **Lotteries Participated**: Number of different lotteries played
+- **Best Match**: Highest number of matches achieved (up to 5/5)
+- **Match Breakdown**: Detailed breakdown of 2/5, 3/5, 4/5, and 5/5 matches
+- **Pending Prizes**: Current claimable winnings
+
+#### Global Lottery Statistics
+- **Total Lotteries**: Number of lotteries conducted
+- **Total Tickets Sold**: System-wide ticket sales
+- **Average Prize Pool**: Mean prize pool across all lotteries
+- **Largest Prize Pool**: Biggest jackpot in lottery history
+- **Total Prizes Distributed**: Cumulative winnings paid out
+- **Jackpot Rollover**: Current rollover amount
+
+### Admin Dashboard
+
+The admin tab (visible only to contract owner) includes:
+
+#### Fee Management
+- **Current Admin Balance**: Real-time display of accumulated fees
+- **Withdraw Admin Fees**: One-click withdrawal of all collected fees
+- **Transaction Status**: Loading states and success notifications
+
+#### System Statistics
+- **Total Tickets Sold**: Global ticket sales counter
+- **Current Lottery ID**: Active lottery identifier
+- **Jackpot Rollover**: Current rollover amount
+- **Contract Health**: System status indicators
+
+#### Security Features
+- **Owner-Only Access**: Restricted to contract deployer
+- **Safe Withdrawal**: Prevents withdrawal of player funds
+- **Event Logging**: All admin actions are logged on-chain
+- **Balance Validation**: Ensures sufficient funds before withdrawal
 
 ### Key Components
 
@@ -178,6 +235,15 @@ The test suite includes 23 tests covering:
 - Admin functions and security
 - Edge cases and error handling
 
+### API Endpoints
+
+The application includes several API endpoints for statistics functionality:
+
+- `/api/getUserTickets` - Fetch user tickets for a specific lottery
+- `/api/getLotteryDetails` - Get detailed lottery information
+- `/api/getWinningNumbers` - Retrieve winning numbers for a lottery
+- `/api/getUserPrize` - Get user's prize amount for a specific lottery
+
 ### Development Commands
 
 ```bash
@@ -199,6 +265,45 @@ yarn lint
 # Format code
 yarn format
 ```
+
+## Recent Updates (v2.0)
+
+### New Features Added
+
+1. **Admin Dashboard** (`components/AdminDashboard.tsx`)
+   - Real-time admin fee balance display
+   - One-click fee withdrawal for contract owner
+   - System statistics and health monitoring
+   - Secure owner-only access controls
+
+2. **Player Statistics** (`components/PlayerStatistics.tsx`)
+   - Comprehensive on-chain data analysis
+   - Personal performance metrics and analytics
+   - Global lottery statistics and trends
+   - Interactive data visualization
+
+3. **Enhanced Navigation**
+   - Added Statistics and Admin tabs
+   - Responsive tab layout for mobile devices
+   - Improved user experience with clear categorization
+
+4. **API Infrastructure**
+   - RESTful endpoints for data fetching
+   - Optimized contract interaction patterns
+   - Error handling and validation
+
+### Technical Improvements
+
+- **Performance**: Optimized contract reads with caching
+- **UX**: Enhanced loading states and error handling
+- **Security**: Improved access controls and validation
+- **Scalability**: Modular component architecture
+
+### Breaking Changes
+
+- Navigation structure updated with new tabs
+- Component imports added for new features
+- API routes added for statistics functionality
 
 ## GitHub Deployment
 

@@ -13,7 +13,7 @@ contract KasplexLottery {
     // Constants
     uint256 public constant TICKET_PRICE = 1 ether; // 1 KAS
     uint256 public constant ADMIN_FEE_PERCENT = 1; // 1%
-    uint256 public constant DRAW_INTERVAL = 3.5 days; // 3.5 days in seconds
+    uint256 public constant DRAW_INTERVAL = 1 minutes; // 1 minute for testing
     uint256 public constant MIN_NUMBERS = 1;
     uint256 public constant MAX_NUMBERS = 35;
     uint256 public constant NUMBERS_PER_TICKET = 5;
@@ -199,7 +199,8 @@ contract KasplexLottery {
     function _countWinners(uint256 lotteryId) internal {
         Lottery storage lottery = lotteries[lotteryId];
         
-        for (uint256 i = 0; i < lottery.totalTickets; i++) {
+        // Iterate through all tickets to find ones for this lottery
+        for (uint256 i = 0; i < totalTicketsCount; i++) {
             if (tickets[i].lotteryId == lotteryId) {
                 uint256 matches = _countMatches(tickets[i].numbers, lottery.winningNumbers);
                 if (matches >= 2) { // Minimum 2 matches to win
@@ -237,7 +238,7 @@ contract KasplexLottery {
         lottery.totalDistributedPrizes = totalDistributed;
         
         // Distribute prizes to winners
-        for (uint256 i = 0; i < lottery.totalTickets; i++) {
+        for (uint256 i = 0; i < totalTicketsCount; i++) {
             if (tickets[i].lotteryId == lotteryId) {
                 uint256 matches = _countMatches(tickets[i].numbers, lottery.winningNumbers);
                 if (matches >= 2) {
@@ -413,7 +414,7 @@ contract KasplexLottery {
         require(lotteries[lotteryId].drawn, "Lottery not drawn yet");
         
         uint256 totalPrize = 0;
-        for (uint256 i = 0; i < lotteries[lotteryId].totalTickets; i++) {
+        for (uint256 i = 0; i < totalTicketsCount; i++) {
             if (tickets[i].lotteryId == lotteryId && tickets[i].player == player) {
                 uint256 matches = _countMatches(tickets[i].numbers, lotteries[lotteryId].winningNumbers);
                 if (matches >= 2) {
